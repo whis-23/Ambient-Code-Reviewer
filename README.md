@@ -1,7 +1,7 @@
 # 🤖 Ambient Code Reviewer
 
-> **Real-time AI agent for GitHub Pull Request architectural reviews.**  
-> Powered by **FastAPI · LangGraph · Gemini 2.0 · pgvector · Redis · Celery**
+> Powered by **FastAPI · LangGraph · Gemini 2.5 · pgvector · Redis · Celery**
+
 
 ---
 
@@ -13,7 +13,8 @@ The **Ambient Code Reviewer** is an autonomous AI agent that monitors your GitHu
 
 -   **🧠 Intelligent Context**: Uses **pgvector** to retrieve relevant internal documentation for every code change.
 -   **⚡ Agentic Workflow**: Orchestrated by **LangGraph** for multi-step reasoning: *Fetch → Mask → Retrieve → Analyze → Post*.
--   **💎 Gemini-Powered**: Leverages **Gemini 2.0 Flash** for low-latency, high-quality architectural critique.
+-   **💎 Gemini-Powered**: Leverages **Gemini 2.5 Flash-Lite** for ultra-low latency, high-quality architectural critique.
+
 -   **🛡️ Security First**: Integrated **PII & Secret masking** pre-processor ensures sensitive data never leaves your environment.
 -   **🏗️ Enterprise Ready**: Robust background processing via **Celery & Redis** with automatic retries and horizontal scalability.
 
@@ -30,7 +31,8 @@ graph TD
     subgraph "LangGraph Workflow"
         D --> E[Fetcher & Masker]
         E --> F[pgvector Retriever]
-        F --> G[Gemini 2.0 Analyzer]
+        F --> G[Gemini 2.5 Analyzer]
+
         G --> H[GitHub API Poster]
     end
     
@@ -85,7 +87,8 @@ docker-compose exec api python -m scripts.ingest_docs --docs-dir docs/
 | `REDIS_URL` | — | Redis broker connection string |
 | `GITHUB_WEBHOOK_SECRET`| — | HMAC secret for webhook validation |
 | `GITHUB_TOKEN` | — | GitHub PAT for posting PR comments |
-| `EMBEDDING_PROVIDER` | `gemini`| `gemini` (768-dim) or `local` (sentence-transformers) |
+| `EMBEDDING_PROVIDER` | `gemini`| `gemini` (uses gemini-embedding-001 at 768-dim) |
+
 
 ---
 
