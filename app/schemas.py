@@ -1,6 +1,3 @@
-"""
-Pydantic schemas for Ambient Code Reviewer.
-"""
 from typing import Optional, List
 from pydantic import BaseModel, HttpUrl
 
