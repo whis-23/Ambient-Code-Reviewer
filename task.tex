@@ -1,0 +1,209 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Define colors for code listing
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+\title{\textbf{Technical Specification: Ambient Code Reviewer \\ \large Real-Time AI Agent for Developer Experience (DevEx)}}
+\date{March 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Project Overview}
+The \textbf{Ambient Code Reviewer} is a high-performance, real-time agentic system that monitors GitHub Pull Requests. It utilizes \textbf{LangGraph} for stateful orchestration and \textbf{pgvector} for context-aware Retrieval-Augmented Generation (RAG).
+
+\section{System Environment Setup}
+To initialize the development environment, the following directory structure and dependency management are required.
+
+\subsection{Directory Structure}
+\begin{lstlisting}[language=bash]
+.
+├── app/
+│   ├── main.py          # FastAPI Entrypoint
+│   ├── agents.py        # LangGraph Workflow Definitions
+│   ├── database.py      # pgvector Connection Logic
+│   └── schemas.py       # Pydantic Models
+├── scripts/
+│   └── ingest_docs.py   # RAG Injection Script
+├── Dockerfile
+└── requirements.txt
+\end{lstlisting}
+
+\subsection{Dependencies (requirements.txt)}
+\begin{lstlisting}
+fastapi==0.109.0
+uvicorn==0.27.0
+langchain==0.1.0
+langgraph==0.0.15
+psycopg2-binary==2.9.9
+pgvector==0.2.4
+openai==1.12.0
+\end{lstlisting}
+
+\section{Core Implementation (Static Code)}
+
+\subsection{FastAPI Webhook Handler}
+The backend serves as the listener for GitHub's real-time events.
+
+\begin{lstlisting}[language=python, caption=app/main.py]
+from fastapi import FastAPI, Request, BackgroundTasks
+from .agents import run_review_workflow
+
+app = FastAPI()
+
+@app.post("/webhook/github")
+async def github_webhook(request: Request, background_tasks: BackgroundTasks):
+    payload = await request.json()
+    
+    # Extract PR details and Diff
+    pr_data = {
+        "repo": payload['repository']['full_name'],
+        "diff_url": payload['pull_request']['diff_url'],
+        "pr_id": payload['pull_request']['id']
+    }
+    
+    # Trigger Agentic Workflow asynchronously
+    background_tasks.add_task(run_review_workflow, pr_data)
+    
+    return {"status": "processing"}
+\end{lstlisting}
+
+\subsection{LangGraph State Logic}
+The state manages the transition between code analysis and context retrieval.
+
+\begin{lstlisting}[language=python, caption=app/agents.py]
+from typing import TypedDict, List
+from langgraph.graph import StateGraph, END
+
+class AgentState(TypedDict):
+    diff_content: str
+    retrieved_context: List[str]
+    critique: str
+
+def retrieve_context(state: AgentState):
+    # Logic to query pgvector based on state['diff_content']
+    return {"retrieved_context": ["Found: Use Redis for caching per ADR-04"]}
+
+def analyze_code(state: AgentState):
+    # Logic for LLM to compare diff against context
+    return {"critique": "Please migrate local dict to Redis."}
+
+# Define Workflow
+workflow = StateGraph(AgentState)
+workflow.add_node("retriever", retrieve_context)
+workflow.add_node("analyzer", analyze_code)
+workflow.set_entry_point("retriever")
+workflow.add_edge("retriever", "analyzer")
+workflow.add_edge("analyzer", END)
+\end{lstlisting}
+
+\section{Vector Storage Configuration}
+The database schema for \texttt{pgvector} ensures that technical documentation is searchable by semantic similarity.
+
+\begin{lstlisting}[language=sql, caption=Database Schema]
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE technical_docs (
+    id serial PRIMARY KEY,
+    content text,
+    metadata jsonb,
+    embedding vector(1536) -- Match OpenAI/Gemini embedding dims
+);
+\end{lstlisting}
+
+\section{Deployment Strategy}
+The application is deployed as a multi-container stack using Docker Compose for local testing and Kubernetes for production scaling.
+
+\begin{lstlisting}[language=bash]
+# Build and Run
+docker-compose up --build
+\end{lstlisting}
+\section{Problem Statement \& Motivation}
+In modern agile development, Senior Engineers often become bottlenecks during Code Reviews. Standard Static Analysis Security Testing (SAST) tools (like SonarQube or ESLint) catch syntax and security vulnerabilities but fail to understand \textbf{Architectural Intent}.
+
+The \textbf{Ambient Code Reviewer} solves this by:
+\begin{itemize}
+    \item \textbf{Reducing Cognitive Load:} Automatically flagging violations of internal Architecture Decision Records (ADRs).
+    \item \textbf{Contextual Onboarding:} Helping junior developers learn "the team's way" without constant manual oversight.
+    \item \textbf{Eliminating "Nitpicks":} Handling repetitive formatting or pattern-matching tasks, allowing humans to focus on high-level logic.
+\end{itemize}
+
+\section{System Functional Details}
+The system operates as an "invisible team member" with the following capabilities:
+
+\subsection{Semantic PR Analysis}
+Instead of regex-based matching, the system converts the PR diff into a high-dimensional vector. It identifies the \textit{intent} of the change (e.g., "Adding a new API endpoint" or "Modifying Database Schema").
+
+\subsection{Organizational Memory Retrieval (RAG)}
+The system performs a similarity search against a \texttt{pgvector} store containing:
+\begin{itemize}
+    \item \textbf{Confluence/Notion Docs:} Engineering wikis and best practices.
+    \item \textbf{Approved Design Patterns:} Code snippets from the `main` branch that represent "Gold Standards."
+    \item \textbf{Historical Rejections:} Learning from previous PR comments to avoid repeating past mistakes.
+\end{itemize}
+
+\subsection{Agentic Reasoning Loop}
+Using \textbf{LangGraph}, the system doesn't just "search and paste." It follows a reasoning chain:
+\begin{enumerate}
+    \item \textbf{Observation:} User is using a \texttt{for-loop} for data transformation.
+    \item \textbf{Retrieval:} Internal docs suggest using \texttt{Pandas vectorization} for datasets over 1MB.
+    \item \textbf{Analysis:} The current dataset size in the PR context is 5MB.
+    \item \textbf{Action:} Suggest a refactor with a code snippet provided in the GitHub comment.
+\end{enumerate}
+
+\section{Detailed Workflow \& Trigger Logic}
+The following sequence diagram outlines the real-time interaction:
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|l|l|p{8cm}|}
+\hline
+\textbf{Step} & \textbf{Component} & \textbf{Action} \\ \hline
+1 & GitHub Webhook & Triggered on \texttt{PR\_OPENED}. Sends Diff payload to FastAPI. \\ \hline
+2 & FastAPI Gateway & Validates HMAC signature and enqueues the task in Redis/Celery. \\ \hline
+3 & LangGraph Worker & Initializes \texttt{AgentState} with the Git Diff. \\ \hline
+4 & Retriever Node & Queries \texttt{pgvector} for documentation relevant to the modified files. \\ \hline
+5 & Critic Node & LLM compares Diff vs. Docs and generates "Architectural Feedback." \\ \hline
+6 & GitHub API & Posts a single, consolidated comment on the PR thread. \\ \hline
+\end{tabular}
+\caption{System Execution Flow}
+\end{table}
+
+\section{Data Governance \& Security}
+To ensure the security of private codebases:
+\begin{itemize}
+    \item \textbf{Data Masking:} Sensitive strings (API Keys, PII) are scrubbed via a regex pre-processor before being sent to the LLM.
+    \item \textbf{Local Embeddings:} Use of local models (e.g., \texttt{sentence-transformers}) to keep vector generation within the private VPC.
+\end{itemize}
+\end{document}
