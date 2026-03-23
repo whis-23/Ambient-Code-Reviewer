@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 from .agents import run_review_workflow
 from .database import create_schema
+from .tasks import trigger_review
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -114,8 +115,8 @@ async def github_webhook(
         "Queuing review for PR #%s in %s", pr_data["pr_number"], pr_data["repo"]
     )
 
-    # ── Dispatch to background worker ─────────────────────── #
-    background_tasks.add_task(run_review_workflow, pr_data)
+    # ── Dispatch to Celery worker ─────────────────────────── #
+    trigger_review.delay(pr_data)
 
     return {
         "status":     "processing",

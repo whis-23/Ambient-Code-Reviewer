@@ -14,10 +14,10 @@ services:
     environment:
       - DATABASE_URL=postgresql://acr_user:acr_pass@db:5432/acr_db
       - REDIS_URL=redis://redis:6379/0
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-local}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-gemini}
       - APP_ENV=${APP_ENV:-development}
     depends_on:
       db:
@@ -42,9 +42,9 @@ services:
     environment:
       - DATABASE_URL=postgresql://acr_user:acr_pass@db:5432/acr_db
       - REDIS_URL=redis://redis:6379/0
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-local}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-gemini}
     depends_on:
       db:
         condition: service_healthy

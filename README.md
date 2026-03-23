@@ -12,7 +12,7 @@ When a developer opens or updates a Pull Request, the Ambient Code Reviewer:
 1. **Receives** the GitHub webhook event (HMAC-validated)
 2. **Fetches** the raw diff (secrets/PII auto-redacted before LLM contact)
 3. **Retrieves** the most relevant internal ADRs and docs via **pgvector** semantic search
-4. **Critiques** the diff against those docs using an LLM (GPT-4o-mini by default)
+4. **Critiques** the diff against those docs using an LLM (Gemini 2.0 Flash by default)
 5. **Posts** a consolidated architectural review comment directly on the PR thread
 
 ## Architecture
@@ -65,7 +65,7 @@ GitHub Webhook
 ```bash
 cp .env.example .env
 # Edit .env and fill in:
-#   OPENAI_API_KEY, GITHUB_WEBHOOK_SECRET, GITHUB_TOKEN
+#   GOOGLE_API_KEY, GITHUB_WEBHOOK_SECRET, GITHUB_TOKEN
 ```
 
 ### 2. Start all services
