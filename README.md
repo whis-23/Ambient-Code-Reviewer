@@ -22,24 +22,8 @@ The **Ambient Code Reviewer** is an autonomous AI agent that monitors your GitHu
 
 ## 🏗️ Architecture
 
-```mermaid
-graph TD
-    A[GitHub Webhook] -->|HMAC Validate| B(FastAPI /webhook)
-    B -->|Enqueue| C[(Redis Queue)]
-    C -->|Process| D[Celery Worker]
-    
-    subgraph "LangGraph Workflow"
-        D --> E[Fetcher & Masker]
-        E --> F[pgvector Retriever]
-        F --> G[Gemini 2.5 Analyzer]
+![Architectural Flow - Academic Style](C:\Users\Whis\.gemini\antigravity\brain\a56a4933-cd8f-41ef-8724-e83c4ee550cc\acr_architecture_academic_1774308860937.png)
 
-        G --> H[GitHub API Poster]
-    end
-    
-    F <--> I[(pgvector DB)]
-    G <--> J[Google AI API]
-    H --> K[PR Comment]
-```
 
 ---
 
