@@ -1,13 +1,3 @@
-"""
-RAG Ingestion Script — Ambient Code Reviewer
-============================================
-Loads Markdown/text documents from the `docs/` directory,
-generates embeddings (local sentence-transformers by default),
-and upserts them into the pgvector `technical_docs` table.
-
-Usage:
-    python -m scripts.ingest_docs [--docs-dir docs/]
-"""
 import argparse
 import json
 import logging
@@ -15,7 +5,6 @@ import os
 import sys
 from pathlib import Path
 
-# Allow running from project root
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dotenv import load_dotenv
@@ -29,33 +18,24 @@ GOOGLE_API_KEY     = os.getenv("GOOGLE_API_KEY", "")
 
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".rst"}
 
-
-# ─────────────── Embedding ───────────────────────────────── #
 def embed_text(text: str) -> list[float]:
-    """
-    - gemini  → gemini-embedding-001, task_type=retrieval_document (768-dim)  [default]
-    - local   → sentence-transformers all-MiniLM-L6-v2 (384-dim padded to 768)
-    """
-    if EMBEDDING_PROVIDER == "gemini":
-        import google.generativeai as genai
-        genai.configure(api_key=GOOGLE_API_KEY)
-        result = genai.embed_content(
-            model="models/gemini-embedding-001",
-            content=text[:8000],
-            task_type="retrieval_document",   # indexing-time task type
-        )
-        return result["embedding"]            # 768-dim
-    else:  # local fallback
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer("all-MiniLM-L6-v2")
-        vec = model.encode(text[:2048]).tolist()  # 384-dim
-        return (vec * 2)[:768]                    # pad to 768
+    import google.generativeai as genai
 
 
-# ─────────────── Chunking ────────────────────────────────── #
+    import google.generativeai as genai
+
+    genai.configure(api_key=GOOGLE_API_KEY)
+    result = genai.embed_content(
+        model="models/gemini-embedding-001",
+        content=text[:8000],
+        task_type="retrieval_document",
+        output_dimensionality=768,
+    )
+    return result["embedding"]
+
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
-    """Split text into overlapping word-level chunks."""
     words = text.split()
+
     chunks = []
     start = 0
     while start < len(words):
@@ -64,8 +44,6 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]
         start += chunk_size - overlap
     return chunks
 
-
-# ─────────────── Ingest ──────────────────────────────────── #
 def ingest_directory(docs_dir: Path) -> int:
     from app.database import create_schema, insert_document
 
@@ -104,8 +82,6 @@ def ingest_directory(docs_dir: Path) -> int:
     logger.info("✅  Ingestion complete. %d chunk(s) inserted.", total_inserted)
     return total_inserted
 
-
-# ─────────────── CLI ─────────────────────────────────────── #
 def main():
     parser = argparse.ArgumentParser(description="Ingest documentation into pgvector.")
     parser.add_argument(
