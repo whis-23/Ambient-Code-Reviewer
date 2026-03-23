@@ -1,6 +1,5 @@
-"""
-pgvector database connection and similarity search logic.
-"""
+
+
 import os
 import logging
 from typing import List, Tuple
@@ -17,21 +16,30 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://acr_user:acr_pass@localho
 
 
 def get_connection():
-    """Create and return a new psycopg2 connection with pgvector registered."""
     conn = psycopg2.connect(DATABASE_URL)
+
     register_vector(conn)
     return conn
 
 
 def create_schema() -> None:
-    """
-    Initialize the pgvector schema.
-    Creates the vector extension and technical_docs table if they don't exist.
-    """
+    # Use a raw connection first to ensure the extension exists
+
+
+    # Use a raw connection first to ensure the extension exists
+    raw_conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with raw_conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        raw_conn.commit()
+    finally:
+        raw_conn.close()
+
+    # Now that the extension is guaranteed to exist, use the regular connection
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS technical_docs (
                     id          SERIAL PRIMARY KEY,
@@ -39,14 +47,17 @@ def create_schema() -> None:
                     metadata    JSONB DEFAULT '{}',
                     embedding   VECTOR(768)
                 );
+
+
             """)
-            # IVFFlat index for fast ANN search on large datasets
-            cur.execute("""
+            # Create IVFFlat index for fast search
+    cur.execute("""
                 CREATE INDEX IF NOT EXISTS technical_docs_embedding_idx
                 ON technical_docs
                 USING ivfflat (embedding vector_cosine_ops)
                 WITH (lists = 100);
             """)
+
         conn.commit()
         logger.info("Schema created / verified OK.")
     finally:
@@ -54,11 +65,8 @@ def create_schema() -> None:
 
 
 def insert_document(content: str, metadata: dict, embedding: List[float]) -> int:
-    """
-    Insert a document and its embedding into the technical_docs table.
-    Returns the new row id.
-    """
     conn = get_connection()
+
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -79,13 +87,8 @@ def insert_document(content: str, metadata: dict, embedding: List[float]) -> int
 def query_similar_docs(
     embedding: List[float], top_k: int = 5
 ) -> List[Tuple[str, dict, float]]:
-    """
-    Perform cosine similarity search against stored embeddings.
-
-    Returns a list of (content, metadata, similarity_score) tuples,
-    ordered by descending similarity.
-    """
     conn = get_connection()
+
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
