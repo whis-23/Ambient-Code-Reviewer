@@ -1,13 +1,6 @@
-"""
-LangGraph agentic workflow for the Ambient Code Reviewer.
 
-Graph: retriever → analyzer → poster → END
 
-Nodes:
-  - retriever : Embeds the PR diff, queries pgvector for relevant ADRs/docs.
-  - analyzer  : LLM critic compares diff vs. retrieved docs → architectural feedback.
-  - poster    : Posts the critique as a GitHub PR comment via the REST API.
-"""
+
 import os
 import re
 import json
@@ -23,7 +16,8 @@ from .database import query_similar_docs
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# ───────────────────────── Config ────────────────────────── #
+# Configuration
+
 GOOGLE_API_KEY      = os.getenv("GOOGLE_API_KEY", "")
 GITHUB_TOKEN        = os.getenv("GITHUB_TOKEN", "")
 EMBEDDING_PROVIDER  = os.getenv("EMBEDDING_PROVIDER", "gemini")
@@ -41,7 +35,8 @@ _SECRET_PATTERNS = [
 REDACTED = "[REDACTED]"
 
 
-# ───────────────────────── State ─────────────────────────── #
+# State Definition
+
 class AgentState(TypedDict):
     pr_data:            dict            # {repo, diff_url, pr_id, pr_number, ...}
     diff_content:       str             # Raw diff text (fetched from GitHub)
@@ -51,19 +46,21 @@ class AgentState(TypedDict):
     posted_to_github:   bool
 
 
-# ─────────────────── Helper utilities ────────────────────── #
+# Helper Functions
+
 def _mask_secrets(text: str) -> str:
-    """Scrub secrets and PII from text before passing to LLM."""
     for pattern in _SECRET_PATTERNS:
+
         text = pattern.sub(REDACTED, text)
     return text
 
 
 def _fetch_diff(diff_url: str) -> str:
-    """Download the raw diff from GitHub."""
     headers = {"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN else {}
+
     try:
-        resp = httpx.get(diff_url, headers=headers, timeout=30)
+        # GitHub often redirects diff URLs to patch-diff.githubusercontent.com
+        resp = httpx.get(diff_url, headers=headers, timeout=30, follow_redirects=True)
         resp.raise_for_status()
         return resp.text
     except Exception as exc:
@@ -71,34 +68,32 @@ def _fetch_diff(diff_url: str) -> str:
         return ""
 
 
+
 def _embed(text: str) -> List[float]:
-    """
-    Produce an embedding vector.
-    - gemini  → gemini-embedding-001 (768-dim)  [default]
-    - local   → sentence-transformers all-MiniLM-L6-v2 (384-dim padded to 768)
-    """
-    if EMBEDDING_PROVIDER == "gemini":
-        import google.generativeai as genai
-        genai.configure(api_key=GOOGLE_API_KEY)
-        result = genai.embed_content(
-            model="models/gemini-embedding-001",
-            content=text[:8000],
-            task_type="retrieval_query",
-        )
-        return result["embedding"]                # 768-dim
-    else:  # local fallback
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer("all-MiniLM-L6-v2")
-        vec = model.encode(text[:2048]).tolist()  # 384-dim
-        return (vec * 2)[:768]                    # pad to 768
+    if not text.strip():
+
+        # Return a zero vector if content is empty
+        return [0.0] * 768
+    import google.generativeai as genai
+    genai.configure(api_key=GOOGLE_API_KEY)
+    result = genai.embed_content(
+        model="models/gemini-embedding-001",
+        content=text[:8000],
+        task_type="retrieval_query",
+        output_dimensionality=768,
+    )
+    return result["embedding"]
+
+
 
 
 def _call_llm(prompt: str) -> str:
-    """Call Gemini 2.0 Flash for code review critique."""
     import google.generativeai as genai
+
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",
+        model_name="gemini-2.5-flash-lite",
+
         system_instruction=(
             "You are a Senior Software Architect performing a code review. "
             "Your goal is to identify violations of the team's internal architectural "
@@ -114,8 +109,8 @@ def _call_llm(prompt: str) -> str:
 
 
 def _post_github_comment(repo: str, pr_number: int, body: str) -> bool:
-    """Post a comment on the GitHub PR thread."""
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json",
@@ -131,10 +126,11 @@ def _post_github_comment(repo: str, pr_number: int, body: str) -> bool:
         return False
 
 
-# ─────────────────────────── Nodes ───────────────────────── #
+# Graph Nodes
+
 def fetch_and_mask_diff(state: AgentState) -> dict:
-    """Fetch raw diff from GitHub and apply data masking."""
     diff_url = state["pr_data"]["diff_url"]
+
     raw_diff = _fetch_diff(diff_url)
     masked   = _mask_secrets(raw_diff)
     logger.info("Diff fetched (%d chars). Masked version: %d chars.", len(raw_diff), len(masked))
@@ -142,10 +138,8 @@ def fetch_and_mask_diff(state: AgentState) -> dict:
 
 
 def retrieve_context(state: AgentState) -> dict:
-    """
-    Embed the masked diff and query pgvector for the most relevant ADRs/docs.
-    """
-    diff_snippet = state["masked_diff"][:4096]  # Truncate for embedding
+    diff_snippet = state["masked_diff"][:4096]
+
     embedding = _embed(diff_snippet)
     results   = query_similar_docs(embedding, top_k=5)
 
@@ -159,10 +153,8 @@ def retrieve_context(state: AgentState) -> dict:
 
 
 def analyze_code(state: AgentState) -> dict:
-    """
-    Send masked diff + retrieved context to the LLM critic for analysis.
-    """
     context_block = "\n\n---\n\n".join(state["retrieved_context"])
+
     if not context_block:
         context_block = "(No relevant ADRs or docs found in the knowledge base.)"
 
@@ -185,8 +177,8 @@ Format your response as a GitHub Markdown comment with clear headings."""
 
 
 def post_comment(state: AgentState) -> dict:
-    """Post the final critique to the GitHub PR as a comment."""
     pr    = state["pr_data"]
+
     body  = (
         "## 🤖 Ambient Code Reviewer\n\n"
         + state["critique"]
@@ -200,7 +192,8 @@ def post_comment(state: AgentState) -> dict:
     return {"posted_to_github": ok}
 
 
-# ─────────────────────── Build Graph ─────────────────────── #
+# Graph Construction
+
 def build_graph() -> StateGraph:
     workflow = StateGraph(AgentState)
 
@@ -223,11 +216,8 @@ app = build_graph()
 
 
 def run_review_workflow(pr_data: dict) -> dict:
-    """
-    Entry point for the Celery worker.
-    Initialises AgentState and invokes the compiled LangGraph.
-    """
     initial_state: AgentState = {
+
         "pr_data":           pr_data,
         "diff_content":      "",
         "masked_diff":       "",
