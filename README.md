@@ -22,7 +22,7 @@ The **Ambient Code Reviewer** is an autonomous AI agent that monitors your GitHu
 
 ## 🏗️ Architecture
 
-![Architectural Flow - Academic Style](C:\Users\Whis\.gemini\antigravity\brain\a56a4933-cd8f-41ef-8724-e83c4ee550cc\acr_architecture_academic_1774308860937.png)
+![Architectural Flow - Academic Style](acr_architecture.png)
 
 
 ---
